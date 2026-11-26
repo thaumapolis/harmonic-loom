@@ -1,0 +1,15 @@
+{
+  "name": "harmonic-loom",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Two strings coupled through a shared bridge, by modal synthesis. The bridge's mode passband is the instrument you play: it decides which partials cross, which string rings sympathetically, and what beats you hear. The app has no runtime dependencies; this file lists only the Node libraries the checks import, which nixpkgs does not carry (node, Playwright and Chromium come from the flake).",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "bash tools/check.sh"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.3",
+    "jsdom": "^20.0.3"
+  }
+}
