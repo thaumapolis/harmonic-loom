@@ -8,6 +8,8 @@ Two real synthesised strings, connected by a bridge that only lets some of their
 
 *About that link: it is served by [raw.githack.com](https://raw.githack.com), which fetches the committed `index.html` from this repo on GitHub. It needs the network to **load**; once loaded the page asks for nothing else. Opening [`index.html`](index.html) from disk behaves identically and needs no network at all.*
 
+![Two scopes over a shared axis, one trace thinning as the other thickens, above a spectrum holding energy in both colours](docs/thumb.png)
+
 ## What you are looking at
 
 Every string here is not one oscillator but a stack of 24 **partials** — the fundamental plus its overtones — each with its own amplitude, phase and decay. That is how a real string behaves, and modelling it that way buys something specific: *which* partials pass from one string to the other becomes a literal property of the signal path rather than something that emerges and has to be inferred afterwards. The picture and the sound read the same state, so they cannot disagree.
