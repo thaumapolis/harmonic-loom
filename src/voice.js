@@ -24,6 +24,9 @@ import { MODE_COUNT, bridgeWeight, modeFrequency, modeDecay, pluckAmplitudes } f
 
 const TWO_PI = Math.PI * 2;
 
+/** Samples shown by the scope in `app.js`'s 6 ms window. Keep the two in step. */
+export const TRACE_SAMPLES = Math.ceil(44100 * 0.006);
+
 /** One string: `modeCount` modes, each an independent damped oscillator. */
 export class StringModel {
   constructor(sampleRate, modeCount = MODE_COUNT) {
@@ -114,6 +117,33 @@ export class StringModel {
     return out;
   }
 
+  /**
+   * The string's transverse shape along its length, sampled at `points` positions.
+   *
+   * Rebuilt from the same x/y state that produces the sound, so the picture cannot
+   * disagree with what is heard. Note that each mode uses its OWN quadrature
+   * component: mode k contributes x_k sin(k pi t) + y_k cos(k pi t). Summing only
+   * the x components -- which is the intuitive shortcut, and what this did first --
+   * yields a shape that is static in time, so a ringing string draws a smooth wire
+   * rather than a vibrating one, and the wave never appears to travel.
+   */
+  shape(points) {
+    const out = new Float32Array(points);
+    for (let s = 0; s < points; s += 1) {
+      const t = s / (points - 1);
+      let v = 0;
+      for (let i = 0; i < this.modeCount; i += 1) {
+        if (this.active[i] === 0) continue;
+        const k = i + 1;
+        const angle = Math.PI * k * t;
+        const env = this.envelope[i];
+        v += (this.x[i] * Math.sin(angle) + this.y[i] * Math.cos(angle)) * env;
+      }
+      out[s] = v;
+    }
+    return out;
+  }
+
   /** Modal energy, the quantity the bridge conserves. */
   energies() {
     const out = new Float64Array(this.modeCount);
@@ -140,6 +170,14 @@ export class CoupledStrings {
     this.a = new StringModel(sampleRate, modeCount);
     this.b = new StringModel(sampleRate, modeCount);
     this.bridge = { centre: 8, width: 3, strength: 0.35 };
+    // Rolling window of each string's own recent output, oldest sample first, for
+    // the scope. Kept here rather than assembled by the caller for one reason: the
+    // caller changes. When audio runs, `step` is called by the Web Audio render
+    // thread; when audio is off or a check drives the engine directly, it is called
+    // from a test. A buffer the display filled itself would freeze or scramble
+    // exactly when audio stops driving it -- which is the state the screenshots show.
+    this.traceA = new Float32Array(TRACE_SAMPLES);
+    this.traceB = new Float32Array(TRACE_SAMPLES);
   }
 
   tune(frequencyA, frequencyB, inharmonicity) {
@@ -185,6 +223,13 @@ export class CoupledStrings {
     const { centre, width, strength } = this.bridge;
     const sa = this.a.sample();
     const sb = this.b.sample();
+    const traceA = this.traceA;
+    const traceB = this.traceB;
+    const n = traceA.length;
+    traceA.copyWithin(0, 1);
+    traceB.copyWithin(0, 1);
+    traceA[n - 1] = sa;
+    traceB[n - 1] = sb;
     if (strength <= 0) return { a: sa, b: sb };
     const ax = this.a.x;
     const ay = this.a.y;

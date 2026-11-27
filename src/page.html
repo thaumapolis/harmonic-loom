@@ -1,0 +1,158 @@
+<!--
+  The markup, not the page. Everything in this file is hand-written; the
+  `index.html` at the root is generated from it plus a bundle of `src/*.js`, so
+  that one file opens anywhere. Edit this and run `node tools/build.mjs`.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Harmonic Loom — two strings, one bridge</title>
+<style>
+  :root {
+    --bg: #0a0d12; --panel: #111820; --line: #22303c; --ink: #dbe6ee; --ink-soft: #7d93a3;
+    --on: #8ee3b0; --hot: #e0894a; --a: #8ee3b0; --b: #7fb6e0; --bridge: #b98fe0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+  body {
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header { padding: 10px 14px 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .01em; }
+  h1 .dot { color: var(--bridge); }
+  header p { margin: 0; color: var(--ink-soft); font-size: 13px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 6px 14px 10px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 13px; cursor: pointer;
+    min-height: 44px;
+  }
+  button[aria-pressed="true"], button.primary { background: var(--on); color: #04120c; border-color: transparent; font-weight: 600; }
+  label.field { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 13px; }
+  input[type=range] {
+    width: 118px; accent-color: var(--on);
+    /* 44px is the touch-target floor the browser check enforces. A range input's
+       *visible* track is ~4px, but the element's box is what a finger hits, so the
+       box must be the target height -- 30px here read as four undersized controls. */
+    height: 44px; margin: 0;
+  }
+  select { font: inherit; font-size: 14px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 44px; }
+  #stage { position: relative; flex: 1; min-height: 150px; margin: 0 14px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #0c1117; }
+  /* The canvas reserves a band at the top for the passband caption, so the canvas
+     never has to draw its own text there. In landscape the stage is only ~148px
+     tall and shared that space between both lanes, so a canvas label landed on top
+     of the string label however it was positioned. */
+  #loom { display: block; width: 100%; height: calc(100% - 20px); margin-top: 20px; cursor: crosshair; touch-action: none; }
+  #bandCaption {
+    position: absolute; top: 3px; left: 10px; z-index: 1;
+    font: 11px ui-monospace, monospace; color: rgba(185,143,224,0.85); pointer-events: none;
+  }
+  /*
+   * The card is a grid with a scrolling body and a fixed footer, rather than one
+   * scrolling box. It used to be `display: grid; place-items: center; overflow: auto`
+   * on the overlay with the button as the last child of the card -- and measured on a
+   * phone that put the Start button 533px below the fold in portrait and 364px in
+   * landscape. Nothing indicated it was scrollable, so the app read as a wall of text
+   * with no way in. The action is the one part of this dialog that must never need
+   * scrolling to reach; the explanation can.
+   */
+  #overlay {
+    /* viewport, not stage: #stage clips with overflow:hidden, so a card sized to
+       the viewport could still be cut off by its clipping ancestor. */
+    position: fixed; inset: 0; background: rgba(9,12,17,.97);
+    display: grid; place-items: center; padding: 14px; text-align: left; z-index: 5;
+  }
+  /*
+   * min-height: 0 on the card, not just minmax(0, 1fr) on the row. A grid item's
+   * automatic minimum is its content size, so without it the card's minimum height
+   * is the full height of the unscrolled text and max-height is silently ignored --
+   * measured at 475px tall in a 390px landscape viewport, which put the Start button
+   * back below the fold.
+   */
+  #overlay .card {
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px;
+    width: min(620px, 100%); height: 100%; max-height: 100%; min-height: 0;
+  }
+  #overlay .body { overflow: auto; min-height: 0; padding-right: 4px; }
+  #overlay.hidden { display: none; }
+  #overlay .body p, #overlay .body ul { margin-bottom: 10px; }
+  #overlay h2 { margin: 0 0 8px; font-size: 19px; }
+  #overlay p { color: var(--ink-soft); margin: 0 0 10px; }
+  #overlay strong { color: var(--ink); }
+  #overlay ul { color: var(--ink-soft); margin: 0 0 14px; padding-left: 20px; }
+  #overlay li { margin: 0 0 7px; }
+  #overlay .card button { font: inherit; font-size: 15px; color: #04120c; background: var(--on); border: 0; border-radius: 8px; padding: 12px 18px; min-height: 46px; }
+  code { background: #16202a; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font: 12px ui-monospace, monospace; color: var(--ink); }
+  #spectrum { display: block; width: calc(100% - 28px); height: 132px; margin: 8px 14px 4px; border: 1px solid var(--line); border-radius: 10px; background: #0c1117; }
+  .readout { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 14px 12px; color: var(--ink-soft); font-size: 13px; }
+  .readout b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #rBridge { color: var(--bridge); }
+  @media (max-width: 640px) { header p { display: none; } #spectrum { height: 112px; } }
+  /* Landscape phones have ~390px of height for a header, two rows of controls, the
+     scope and the spectrum. Something has to go, and the scope is the one that shows
+     the transfer, so the spectrum yields rather than being pushed below the fold --
+     it was reachable by scrolling but only 56% visible, and a half-seen chart reads
+     as a broken layout rather than as an invitation to scroll. */
+  @media (orientation: landscape) and (max-height: 460px) {
+    #spectrum { display: none; }
+    #stage { margin-bottom: 10px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Harmonic Loom<span class="dot">.</span></h1>
+  <p>Two strings, one bridge. The bridge decides which partials cross — that is the instrument.</p>
+</header>
+
+<div class="bar">
+  <button id="play" class="primary">Play</button>
+  <button id="pluckA">Pluck A</button>
+  <button id="pluckB">Pluck B</button>
+  <label class="field">A <select id="noteA" aria-label="String A note"></select></label>
+  <label class="field">B <select id="noteB" aria-label="String B note"></select></label>
+  <label class="field">Bridge centre <input id="centre" type="range" min="1" max="24" step="1" value="3"><b id="centreVal" style="color:var(--ink-soft)">3</b></label>
+  <label class="field">Width <input id="width" type="range" min="0.4" max="12" step="0.2" value="2.6"><b id="widthVal" style="color:var(--ink-soft)">2.6</b></label>
+  <label class="field">Coupling <input id="strength" type="range" min="0" max="1" step="0.01" value="0.35"><b id="strengthVal" style="color:var(--ink-soft)">0.35</b></label>
+  <label class="field">Stiffness <input id="inharm" type="range" min="0" max="0.0012" step="0.00002" value="0.00012"><b id="inharmVal" style="color:var(--ink-soft)">0.00012</b></label>
+  <button id="help" aria-pressed="false">?</button>
+</div>
+
+<div id="stage">
+  <span id="bandCaption">bridge passband</span>
+  <canvas id="loom"></canvas>
+  <div id="overlay">
+    <div class="card">
+      <h2>Two strings sharing one bridge</h2>
+      <div class="body">
+      <p>Each string is a real synthesised string: not one tone but a stack of <strong>partials</strong> (the fundamental plus its overtones). The two are connected by a <strong>bridge</strong> that only lets some partials across.</p>
+      <ul>
+        <li><strong>Pluck A or Pluck B</strong>, or drag on the canvas. Energy crosses the bridge and comes back &mdash; you hear it swell and fade. That is beating, not an effect.</li>
+        <li><strong>Bridge centre</strong> is which partial passes. At <code>1</code> only the fundamental crosses; at <code>8</code> the fundamental is blocked, so plucking A makes B hum a note without its own root.</li>
+        <li><strong>Width</strong> is how many partials around the centre get through; <strong>coupling</strong> is how fast energy crosses.</li>
+        <li><strong>Stiffness</strong> is real: it pulls the higher partials sharp, so the octaves are no longer exact. That is why piano tunings are stretched.</li>
+      </ul>
+      <p>The bars at the bottom show where the energy is &mdash; green for A, blue for B, purple for the passband. Nothing here is a recording or a canned animation.</p>
+      </div>
+      <button class="primary" data-action="start">Start playing</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="spectrum"></canvas>
+
+<div class="readout">
+  <span>A <b id="rA">—</b></span>
+  <span>B <b id="rB">—</b></span>
+  <span>bridge passes <b id="rBridge">—</b></span>
+  <span>energy in A <b id="rEA">0%</b> · B <b id="rEB">0%</b></span>
+  <span id="rNote" style="color:var(--hot)"></span>
+</div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

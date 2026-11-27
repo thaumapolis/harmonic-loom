@@ -110,35 +110,34 @@ function clamp01(value) {
  * the reported edge is not quantised to an integer index.
  */
 export function bridgeBandHz(centre, width, f0, inharmonicity, modeCount = MODE_COUNT) {
-  const halfPower = 1 / Math.SQRT2;
-  // Walk outward from the centre so the two -3 dB crossings are the ones adjacent
-  // to the peak. A single left-to-right scan finds the descending crossing twice if
-  // the window is centred below mode 1, which is how this first read the band.
-  const weightOf = (k) => bridgeWeight(k, centre, width);
-  let lower = 1;
-  let upper = modeCount;
-  let peak = 1;
-  for (let k = 2; k <= modeCount; k += 1) {
-    if (weightOf(k) > weightOf(peak)) peak = k;
-  }
-  let k = peak;
-  while (k > 1 && weightOf(k - 1) >= halfPower) k -= 1;
-  if (k > 1) {
-    const a = weightOf(k - 1); const b = weightOf(k);
-    lower = k - 1 + (halfPower - a) / (b - a);
-  }
-  k = peak;
-  while (k < modeCount && weightOf(k + 1) >= halfPower) k += 1;
-  if (k < modeCount) {
-    const a = weightOf(k); const b = weightOf(k + 1);
-    upper = k + (halfPower - a) / (b - a);
-  } else {
-    upper = modeCount;
-  }
+  if (width <= 0) return { lowHz: 0, highHz: 0, lowMode: 0, highMode: 0 };
+  /*
+   * Solve the crossing rather than interpolating between the two integer weights.
+   * Linear interpolation of a Gaussian looked close but was not: for centre 3 /
+   * width 1 it put the low edge at mode 2.256 where the true -3 dB point is 2.167,
+   * so the Hz printed on the page was off by ~9 Hz on a claim whose whole point is
+   * being the real passband. Inverting the window analytically is exact -- and for
+   * this Gaussian that inverse is just centre +/- width * sqrt(ln 2).
+   */
+  const halfWidth = width * Math.sqrt(Math.LN2);
+  const peak = Math.max(1, Math.min(modeCount, Math.round(centre)));
+  const lowEdge = centre - halfWidth;
+  const highEdge = centre + halfWidth;
+  // Clamped to the string's own modes, and reported as such: when the window covers
+  // or exceeds the range there is no -3 dB point inside it, and saying "partial 1-N"
+  // is honest where quoting the analytic edge would invent modes that do not exist.
+  const lowMode = Math.max(1, lowEdge);
+  const highMode = Math.min(modeCount, highEdge);
+  const coversLow = lowEdge <= 1;
+  const coversHigh = highEdge >= modeCount;
   return {
-    lowHz: modeFrequency(f0, lower, inharmonicity),
-    highHz: modeFrequency(f0, upper, inharmonicity),
-    lowMode: Math.round(lower),
-    highMode: Math.round(upper),
+    lowHz: modeFrequency(f0, lowMode, inharmonicity),
+    highHz: modeFrequency(f0, highMode, inharmonicity),
+    lowMode: Math.round(lowMode),
+    highMode: Math.round(highMode),
+    // Whether each edge is a real -3 dB crossing or the end of the string's range.
+    lowIsEdge: !coversLow,
+    highIsEdge: !coversHigh,
+    peakMode: peak,
   };
 }
