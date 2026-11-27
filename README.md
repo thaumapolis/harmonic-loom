@@ -1,5 +1,7 @@
 # Harmonic Loom
 
+<!-- Front page image: docs/thumb.png -->
+
 Two real synthesised strings, connected by a bridge that only lets some of their overtones across. Where the energy ends up is drawn live, so you can watch a note leave one string and arrive in the other.
 
 **▶ [Play it now](https://raw.githack.com/thaumapolis/harmonic-loom/main/index.html)** — no install, no network, nothing to build.
